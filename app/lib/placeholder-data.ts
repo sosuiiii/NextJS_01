@@ -128,8 +128,11 @@ const invoices = [
     date: '2022-06-05',
   },
 ];
-
-const revenue = [
+type Revenue = {
+  month: string;
+  revenue: number;
+};
+const revenue: Revenue[] = [
   { month: 'Jan', revenue: 2000 },
   { month: 'Feb', revenue: 1800 },
   { month: 'Mar', revenue: 2200 },

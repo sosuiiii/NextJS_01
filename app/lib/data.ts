@@ -8,20 +8,23 @@ import {
   Revenue,
 } from './definitions';
 import { formatCurrency } from './utils';
+import { createClient } from '@supabase/supabase-js'
 
-export async function fetchRevenue() {
+const supabase = createClient("https://mbprbozgstetrjbosjng.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1icHJib3pnc3RldHJqYm9zam5nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzU1MzE3MjIsImV4cCI6MjA1MTEwNzcyMn0.RhdMD74wlCozqvBwWGhH52ad9a8OYTwZqFLARPhUVq4")
+
+export async function fetchRevenue(): Promise<Revenue[]> {
   try {
-    // Artificially delay a response for demo purposes.
-    // Don't do this in production :)
+    const { data, error } = await supabase
+      .from('revenue')
+      .select("month, revenue")
+      // .eq('amount', 666);
 
-    // console.log('Fetching revenue data...');
-    // await new Promise((resolve) => setTimeout(resolve, 3000));
-
-    const data = await sql<Revenue>`SELECT * FROM revenue`;
-
-    // console.log('Data fetch completed after 3 seconds.');
-
-    return data.rows;
+    if (error) {
+      console.error('🥕 revenueの取得に失敗  Error fetching data:', error)
+    } else {
+      console.log("✅ revenueの取得に成功！", data)
+    }
+    return data ?? [];
   } catch (error) {
     console.error('Database Error:', error);
     throw new Error('Failed to fetch revenue data.');

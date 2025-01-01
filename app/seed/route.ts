@@ -1,122 +1,141 @@
-// import bcrypt from 'bcrypt';
+import bcrypt from 'bcrypt';
 // import { db } from '@vercel/postgres';
-// import { invoices, customers, revenue, users } from '../lib/placeholder-data';
+import { invoices, customers, revenue, users } from '../lib/placeholder-data';
+import { createClient } from '@supabase/supabase-js'
+import { randomUUID } from 'crypto';
 
-// const client = await db.connect();
+const supabase = createClient("https://mbprbozgstetrjbosjng.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1icHJib3pnc3RldHJqYm9zam5nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzU1MzE3MjIsImV4cCI6MjA1MTEwNzcyMn0.RhdMD74wlCozqvBwWGhH52ad9a8OYTwZqFLARPhUVq4", { db: { schema: 'public' }})
 
-// async function seedUsers() {
-//   await client.sql`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`;
-//   await client.sql`
-//     CREATE TABLE IF NOT EXISTS users (
-//       id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-//       name VARCHAR(255) NOT NULL,
-//       email TEXT NOT NULL UNIQUE,
-//       password TEXT NOT NULL
-//     );
-//   `;
+async function seedUsers() {
+    const insertedUsers = await Promise.all(
+      users.map(async (user) => {
+        const hashedPassword = await bcrypt.hash(user.password, 10);
+        const currentDate: Date = new Date();
+        const { error } = await supabase
+          .from('users')
+          .insert({
+            user_id: user.id,
+            name: user.name,
+            email: user.email,
+            password: user.password,
+          })
+          .select();
 
-//   const insertedUsers = await Promise.all(
-//     users.map(async (user) => {
-//       const hashedPassword = await bcrypt.hash(user.password, 10);
-//       return client.sql`
-//         INSERT INTO users (id, name, email, password)
-//         VALUES (${user.id}, ${user.name}, ${user.email}, ${hashedPassword})
-//         ON CONFLICT (id) DO NOTHING;
-//       `;
-//     }),
-//   );
+        if (error) {
+          console.error(`🥕 Error: seedUsers _ ${user.name}:`, error);
+        } else {
+          console.log("✅ Success: seedUsers")
+        }
+        return user;
+      })
+    );
+    return insertedUsers;
+}
 
-//   return insertedUsers;
-// }
+async function seedInvoices() {
+  try {
+    const insertedInvoices = await Promise.all(
+      invoices.map(async (invoice) => {
+        const { error } = await supabase
+          .from('invoices')
+          .insert({
+            customer_id: invoice.customer_id,
+            amount: invoice.amount,
+            status: invoice.status,
+            date: invoice.date,
+          })
+          .select();
 
-// async function seedInvoices() {
-//   await client.sql`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`;
+        if (error) {
+          console.error(`Error inserting invoice with customer_id ${invoice.customer_id}:`, error);
+        }
+        return invoice;
+      })
+    );
+    console.log('✅ Invoices inserted successfully:', insertedInvoices);
+    return insertedInvoices;
+  } catch (error) {
+    console.error('🥕 Unexpected error inserting invoices:', error);
+  }
+  return [];
+}
 
-//   await client.sql`
-//     CREATE TABLE IF NOT EXISTS invoices (
-//       id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-//       customer_id UUID NOT NULL,
-//       amount INT NOT NULL,
-//       status VARCHAR(255) NOT NULL,
-//       date DATE NOT NULL
-//     );
-//   `;
+async function seedCustomers() {
+    try {
+      const insertedCustomers = await Promise.all(
+        customers.map(async (customer) => {
+          const { error } = await supabase
+            .from('customers')
+            .insert({
+              customer_id: customer.id,
+              name: customer.name,
+              email: customer.email,
+              image_url: customer.image_url,
+            })
+            .select();
 
-//   const insertedInvoices = await Promise.all(
-//     invoices.map(
-//       (invoice) => client.sql`
-//         INSERT INTO invoices (customer_id, amount, status, date)
-//         VALUES (${invoice.customer_id}, ${invoice.amount}, ${invoice.status}, ${invoice.date})
-//         ON CONFLICT (id) DO NOTHING;
-//       `,
-//     ),
-//   );
+          if (error) {
+            console.error(`Error inserting customer ${customer}:`, error);
+          }
+          return customer;
+        })
+      );
+      console.log('✅ customers inserted successfully:', customers);
+      return customers;
+    } catch (error) {
+      console.error('🥕 Unexpected error inserting invoices:', error);
+    }
+    return [];
+}
 
-//   return insertedInvoices;
-// }
+async function seedRevenue() {
+  try {
+    const insertedRevenue = await Promise.all(
+      revenue.map(async (rev) => {
+        const { error } = await supabase
+          .from('revenue')
+          .insert({
+            month: rev.month, // string
+            revenue: rev.revenue, // number
+          })
+          .select();
 
-// async function seedCustomers() {
-//   await client.sql`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`;
-
-//   await client.sql`
-//     CREATE TABLE IF NOT EXISTS customers (
-//       id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-//       name VARCHAR(255) NOT NULL,
-//       email VARCHAR(255) NOT NULL,
-//       image_url VARCHAR(255) NOT NULL
-//     );
-//   `;
-
-//   const insertedCustomers = await Promise.all(
-//     customers.map(
-//       (customer) => client.sql`
-//         INSERT INTO customers (id, name, email, image_url)
-//         VALUES (${customer.id}, ${customer.name}, ${customer.email}, ${customer.image_url})
-//         ON CONFLICT (id) DO NOTHING;
-//       `,
-//     ),
-//   );
-
-//   return insertedCustomers;
-// }
-
-// async function seedRevenue() {
-//   await client.sql`
-//     CREATE TABLE IF NOT EXISTS revenue (
-//       month VARCHAR(4) NOT NULL UNIQUE,
-//       revenue INT NOT NULL
-//     );
-//   `;
-
-//   const insertedRevenue = await Promise.all(
-//     revenue.map(
-//       (rev) => client.sql`
-//         INSERT INTO revenue (month, revenue)
-//         VALUES (${rev.month}, ${rev.revenue})
-//         ON CONFLICT (month) DO NOTHING;
-//       `,
-//     ),
-//   );
-
-//   return insertedRevenue;
-// }
+        if (error) {
+          console.error(`Error inserting invoice with customer_id ${rev}:`, error);
+        }
+        return rev;
+      })
+    );
+    console.log('✅ revenue inserted successfully:', insertedRevenue);
+    return insertedRevenue;
+  } catch (error) {
+    console.error('🥕 Unexpected error inserting revenue:', error);
+  }
+  return [];
+}
 
 export async function GET() {
-  return Response.json({
-    message:
-      'Uncomment this file and remove this line. You can delete this file when you are finished.',
-  });
-  // try {
-  //   await client.sql`BEGIN`;
-  //   await seedUsers();
-  //   await seedCustomers();
-  //   await seedInvoices();
-  //   await seedRevenue();
-  //   await client.sql`COMMIT`;
+  // return Response.json({
+  //   message:
+  //     'Uncomment this file and remove this line. You can delete this file when you are finished.',
+  // });
+  try {
+  //   await supabase.rpc('execute_sql', {
+  //     sql: 'BEGIN'
+  // });
+    await seedUsers();
+    // await seedCustomers();
+    // await seedInvoices();
+    await seedRevenue();
+  //   await supabase.rpc('execute_sql', {
+  //     sql: 'COMMIT'
+  // });
 
-  //   return Response.json({ message: 'Database seeded successfully' });
-  // } catch (error) {
-  //   await client.sql`ROLLBACK`;
-  //   return Response.json({ error }, { status: 500 });
-  // }
+    return Response.json({ message: '✅ Database seeded successfully' });
+  } catch (error) {
+    // await supabase.rpc('execute_sql', {
+    //   sql: 'ROLLBACK'
+  // });
+    return Response.json({ error }, { status: 500 });
+  }
 }
