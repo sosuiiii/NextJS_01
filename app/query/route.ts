@@ -6,19 +6,19 @@ const supabase = createClient("https://mbprbozgstetrjbosjng.supabase.co", "eyJhb
 
 
 async function listInvoices() {
-  const { data, error } = await supabase
-      .from('invoices')
-      .select('amount, customers(name)')
-      .eq('amount', 666);
+  // const { data, error } = await supabase
+  //     .from('invoices')
+  //     .select('amount, customers(name)')
+  //     .eq('amount', 666);
 
-    if (error) {
-      console.error('🥕 tableの取得に失敗  Error fetching data:', error)
-    } else {
-      console.log("✅ tableの取得に成功！", data)
-    }
-    return data
+  //   if (error) {
+  //     console.error('🥕 tableの取得に失敗  Error fetching data:', error)
+  //   } else {
+  //     console.log("✅ tableの取得に成功！", data)
+  //   }
+  //   return data
 
-  // const { data, error } = await supabase.rpc('run_sql', {
+  const { data, error } = await supabase.rpc('invoices')
   //   sql: `
   //     SELECT invoices.amount, customers🥸.name
   //     FROM invoices
@@ -27,12 +27,12 @@ async function listInvoices() {
   //   `
   // });
   
-  // if (error) {
-  //   console.error('Error fetching data:', error);
-  // } else {
-  //   console.log('Fetched data:', data);
-  // }
-  // return data;
+  if (error) {
+    console.error('Error fetching data:', error);
+  } else {
+    console.log('Fetched data:', data);
+  }
+  return data;
   return [];
 }
 

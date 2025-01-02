@@ -6,9 +6,11 @@ import {
   InvoicesTable,
   LatestInvoiceRaw,
   Revenue,
+  LatestInvoice,
 } from './definitions';
 import { formatCurrency } from './utils';
 import { createClient } from '@supabase/supabase-js'
+import { off } from 'process';
 
 const supabase = createClient("https://mbprbozgstetrjbosjng.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1icHJib3pnc3RldHJqYm9zam5nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzU1MzE3MjIsImV4cCI6MjA1MTEwNzcyMn0.RhdMD74wlCozqvBwWGhH52ad9a8OYTwZqFLARPhUVq4")
 
@@ -31,22 +33,41 @@ export async function fetchRevenue(): Promise<Revenue[]> {
   }
 }
 
-export async function fetchLatestInvoices() {
+export async function fetchLatestInvoices(): Promise<LatestInvoice[]> {
   try {
-    const data = await sql<LatestInvoiceRaw>`
-      SELECT invoices.amount, customers.name, customers.image_url, customers.email, invoices.id
-      FROM invoices
-      JOIN customers ON invoices.customer_id = customers.id
-      ORDER BY invoices.date DESC
-      LIMIT 5`;
+    const { data, error } = await supabase
+      .from('invoices')
+      .select(`
+        amount,
+        id,
+        customers (
+          name,
+          image_url,
+          email
+        )
+      `)
+      .order('date', { ascending: false })
+      .limit(5)
+      .returns<LatestInvoice[]>()
 
-    const latestInvoices = data.rows.map((invoice) => ({
-      ...invoice,
+      console.log("✅ インボイス：", data)
+    if (error) {
+      console.error('❌インボイス取得失敗', error);
+      throw new Error('Failed to fetch the latest invoices.');
+    }
+    const latestInvoices: LatestInvoice[] = data?.map((invoice) => ({
+      id: invoice.id,
+      name: invoice.customers.name,
+      image_url: invoice.customers.image_url,
+      email: invoice.customers.email,
       amount: formatCurrency(invoice.amount),
     }));
+
+    // const result = latestInvoices ?? []
+    console.log("🥕おお！", data);
     return latestInvoices;
   } catch (error) {
-    console.error('Database Error:', error);
+    console.error('Unexpected Error:', error);
     throw new Error('Failed to fetch the latest invoices.');
   }
 }
@@ -56,12 +77,22 @@ export async function fetchCardData() {
     // You can probably combine these into a single SQL query
     // However, we are intentionally splitting them to demonstrate
     // how to initialize multiple queries in parallel with JS.
-    const invoiceCountPromise = sql`SELECT COUNT(*) FROM invoices`;
-    const customerCountPromise = sql`SELECT COUNT(*) FROM customers`;
-    const invoiceStatusPromise = sql`SELECT
-         SUM(CASE WHEN status = 'paid' THEN amount ELSE 0 END) AS "paid",
-         SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END) AS "pending"
-         FROM invoices`;
+    // const invoiceCountPromise = sql`SELECT COUNT(*) FROM invoices`;
+    const invoiceCountPromise = supabase
+      .from('invoices')
+      .select()
+    // const customerCountPromise = sql`SELECT COUNT(*) FROM customers`;
+    const customerCountPromise = supabase
+      .from('customers')
+      .select()
+    // const invoiceStatusPromise = sql`SELECT
+    //      SUM(CASE WHEN status = 'paid' THEN amount ELSE 0 END) AS "paid",
+    //      SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END) AS "pending"
+    //      FROM invoices`;
+    // const invoiceStatusPromise = supabase
+    //   .from('invoices')
+    //   .select();
+    const invoiceStatusPromise = await supabase.rpc('invoices_amount')
 
     const data = await Promise.all([
       invoiceCountPromise,
@@ -69,11 +100,23 @@ export async function fetchCardData() {
       invoiceStatusPromise,
     ]);
 
-    const numberOfInvoices = Number(data[0].rows[0].count ?? '0');
-    const numberOfCustomers = Number(data[1].rows[0].count ?? '0');
-    const totalPaidInvoices = formatCurrency(data[2].rows[0].paid ?? '0');
-    const totalPendingInvoices = formatCurrency(data[2].rows[0].pending ?? '0');
+    const numberOfInvoices = Number(data[0].data.length ?? '0');
+    const numberOfCustomers = Number(data[1].data.length ?? '0');
+    const totalPaidInvoices = formatCurrency(data[2].data[0].paid ?? '0');
 
+    const totalPendingInvoices = formatCurrency(data[2].data[0].pending ?? '0');
+    // let totalPaidInvoices = 0;
+    // let totalPendingInvoices = 0;
+    // data[2].data?.forEach(data => {
+    //   if (data.status === "paid") {
+    //     totalPaidInvoices += data.amount
+    //   } else if (data.status === "pending") {
+    //     totalPendingInvoices += data.amount
+    //   }
+    // })
+    console.log('✅:invoiceCountPromise:', data[0]);
+    console.log('✅:customerCountPromise:', data[1]);
+    console.log('✅:invoiceStatusPromise:', data[2]);
     return {
       numberOfCustomers,
       numberOfInvoices,
@@ -81,7 +124,7 @@ export async function fetchCardData() {
       totalPendingInvoices,
     };
   } catch (error) {
-    console.error('Database Error:', error);
+    console.error('🥕:fetchCardDataエラー:', error);
     throw new Error('Failed to fetch card data.');
   }
 }
@@ -94,28 +137,39 @@ export async function fetchFilteredInvoices(
   const offset = (currentPage - 1) * ITEMS_PER_PAGE;
 
   try {
-    const invoices = await sql<InvoicesTable>`
-      SELECT
-        invoices.id,
-        invoices.amount,
-        invoices.date,
-        invoices.status,
-        customers.name,
-        customers.email,
-        customers.image_url
-      FROM invoices
-      JOIN customers ON invoices.customer_id = customers.id
-      WHERE
-        customers.name ILIKE ${`%${query}%`} OR
-        customers.email ILIKE ${`%${query}%`} OR
-        invoices.amount::text ILIKE ${`%${query}%`} OR
-        invoices.date::text ILIKE ${`%${query}%`} OR
-        invoices.status ILIKE ${`%${query}%`}
-      ORDER BY invoices.date DESC
-      LIMIT ${ITEMS_PER_PAGE} OFFSET ${offset}
-    `;
+    const {data, error} = await supabase.rpc('invoices_filtered', {
+      query: query,
+      items_per_page: ITEMS_PER_PAGE,
+      offset_index: offset,
+    })
 
-    return invoices.rows;
+    // const invoices = await sql<InvoicesTable>`
+    //   SELECT
+    //     invoices.id,
+    //     invoices.amount,
+    //     invoices.date,
+    //     invoices.status,
+    //     customers.name,
+    //     customers.email,
+    //     customers.image_url
+    //   FROM invoices
+    //   JOIN customers ON invoices.customer_id = customers.id
+    //   WHERE
+    //     customers.name ILIKE ${`%${query}%`} OR
+    //     customers.email ILIKE ${`%${query}%`} OR
+    //     invoices.amount::text ILIKE ${`%${query}%`} OR
+    //     invoices.date::text ILIKE ${`%${query}%`} OR
+    //     invoices.status ILIKE ${`%${query}%`}
+    //   ORDER BY invoices.date DESC
+    //   LIMIT ${ITEMS_PER_PAGE} OFFSET ${offset}
+    // `;
+    if (error) {
+      console.error("🥕 invoice", error)
+    } else {
+      console.log("✅ invoice", data)
+    }
+
+    return data;
   } catch (error) {
     console.error('Database Error:', error);
     throw new Error('Failed to fetch invoices.');
